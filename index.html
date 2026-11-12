@@ -1,0 +1,666 @@
+import os
+import uuid
+import logging
+from typing import Literal
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from openai import OpenAI
+from pydantic import BaseModel, Field
+
+# ==========================================
+# LENNY AI CONFIGURATION
+# ==========================================
+
+load_dotenv()
+
+APP_NAME = "LENNY AI"
+MODEL = os.getenv("LENNY_MODEL", "gpt-4.1-mini")
+API_KEY = os.getenv("OPENAI_API_KEY")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("lenny-ai")
+
+client = OpenAI(api_key=API_KEY) if API_KEY else None
+
+app = FastAPI(
+    title="LENNY AI API",
+    description="The official LENNY AI platform",
+    version="1.0.0"
+)
+
+# ==========================================
+# LENNY AI WEBSITE
+# ==========================================
+
+HTML = r"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>LENNY AI</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Inter, Arial, sans-serif;
+    min-height: 100vh;
+    color: white;
+    background: #070914;
+    overflow-x: hidden;
+}
+
+.background {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background:
+      radial-gradient(ellipse at 15% 15%,
+        rgba(63, 83, 255, .23), transparent 45%),
+      radial-gradient(ellipse at 85% 80%,
+        rgba(128, 52, 255, .19), transparent 45%),
+      #070914;
+}
+
+.background::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px,
+        transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,
+        transparent 1px);
+    background-size: 45px 45px;
+}
+
+nav {
+    height: 75px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 7%;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: rgba(8,11,25,.65);
+    backdrop-filter: blur(18px);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.logo-icon {
+    width: 39px;
+    height: 39px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: linear-gradient(135deg,#536cff,#9b55ff);
+    box-shadow: 0 0 25px #536cff55;
+    font-size: 22px;
+}
+
+.status {
+    color: #73e9ae;
+    font-size: 12px;
+    border: 1px solid #245b47;
+    padding: 8px 13px;
+    border-radius: 30px;
+    background: #10251e;
+}
+
+main {
+    max-width: 950px;
+    margin: auto;
+    padding: 85px 20px 40px;
+}
+
+.hero {
+    text-align: center;
+    margin-bottom: 45px;
+}
+
+.hero h1 {
+    font-size: clamp(35px,6vw,62px);
+    font-weight: 800;
+    letter-spacing: -2px;
+    background: linear-gradient(90deg,#fff,#9aaaff,#c18bff);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+}
+
+.hero p {
+    color: #939bb6;
+    margin-top: 15px;
+    font-size: 16px;
+}
+
+.chat-panel {
+    background: rgba(19,23,44,.78);
+    border: 1px solid rgba(139,151,255,.17);
+    border-radius: 23px;
+    padding: 25px;
+    min-height: 340px;
+    backdrop-filter: blur(25px);
+    box-shadow: 0 20px 80px #0008;
+}
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #ffffff13;
+}
+
+.ai-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg,#536cff,#9254f7);
+    font-size: 20px;
+}
+
+.chat-header small {
+    display: block;
+    color: #8e9ab9;
+    margin-top: 4px;
+}
+
+.messages {
+    min-height: 170px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 20px 0;
+}
+
+.message {
+    margin: 12px 0;
+    padding: 13px 16px;
+    border-radius: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 90%;
+}
+
+.user {
+    margin-left: auto;
+    background: linear-gradient(135deg,#536cff,#7952ec);
+}
+
+.assistant {
+    background: #252a43;
+    border: 1px solid #ffffff10;
+}
+
+.typing {
+    color: #aeb9ff;
+    font-size: 13px;
+    padding: 10px;
+}
+
+.input-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #0d1225;
+    border: 1px solid #343d62;
+    padding: 10px;
+    border-radius: 16px;
+}
+
+.input-area input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: white;
+    font-size: 15px;
+    padding: 9px;
+}
+
+.input-area input::placeholder {
+    color: #78819e;
+}
+
+.send {
+    border: none;
+    color: white;
+    background: linear-gradient(135deg,#536cff,#9154ff);
+    width: 43px;
+    height: 43px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.send:hover {
+    filter: brightness(1.2);
+}
+
+.send:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.suggestions {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.suggestion {
+    padding: 17px;
+    text-align: left;
+    color: #dce2ff;
+    border: 1px solid #ffffff14;
+    background: #171c33;
+    border-radius: 13px;
+    cursor: pointer;
+}
+
+.suggestion:hover {
+    border-color: #7184ff;
+    background: #202747;
+}
+
+.suggestion span {
+    display: block;
+    margin-top: 7px;
+    color: #8d99ba;
+    font-size: 12px;
+}
+
+footer {
+    text-align: center;
+    color: #646d89;
+    padding: 35px 10px;
+    font-size: 12px;
+}
+
+@media(max-width:600px) {
+    nav { padding: 0 18px; }
+    main { padding-top: 55px; }
+    .suggestions { grid-template-columns: 1fr; }
+    .chat-panel { padding: 16px; }
+    .hero h1 { letter-spacing: -1px; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="background"></div>
+
+<nav>
+    <div class="logo">
+        <div class="logo-icon">L</div>
+        LENNY AI
+    </div>
+
+    <div class="status">● AI PLATFORM</div>
+</nav>
+
+<main>
+
+<section class="hero">
+    <h1>The future starts here.</h1>
+    <p>Your intelligence partner. Ask anything.</p>
+</section>
+
+<section class="chat-panel">
+
+    <div class="chat-header">
+        <div class="ai-icon">✦</div>
+        <div>
+            <strong>LENNY AI</strong>
+            <small>Your intelligent assistant</small>
+        </div>
+    </div>
+
+    <div class="messages" id="messages">
+        <div class="message assistant">
+Hello! I'm LENNY AI.
+
+I'm here to help you explore ideas,
+answer questions, write code and learn.
+
+What would you like to discover today?
+        </div>
+    </div>
+
+    <div class="input-area">
+        <input
+            id="question"
+            type="text"
+            placeholder="Ask LENNY anything..."
+            autocomplete="off"
+            maxlength="12000"
+        >
+
+        <button
+            class="send"
+            id="send"
+            type="button"
+            onclick="sendMessage()"
+            aria-label="Send message"
+        >↑</button>
+    </div>
+
+</section>
+
+<section class="suggestions">
+
+    <button class="suggestion"
+        onclick="ask('Explain artificial intelligence')">
+        ✦ Explore AI
+        <span>Learn something new</span>
+    </button>
+
+    <button class="suggestion"
+        onclick="ask('Help me write a Python program')">
+        &lt;/&gt; Code with AI
+        <span>Build something amazing</span>
+    </button>
+
+    <button class="suggestion"
+        onclick="ask('Give me five creative business ideas')">
+        ◇ Generate ideas
+        <span>Discover possibilities</span>
+    </button>
+
+</section>
+
+</main>
+
+<footer>
+    LENNY AI © 2026 · Intelligent conversations
+</footer>
+
+<script>
+const messages = [];
+
+const messageBox = document.getElementById("messages");
+const input = document.getElementById("question");
+const sendButton = document.getElementById("send");
+
+function addMessage(content, role) {
+    const div = document.createElement("div");
+
+    div.className = "message " + role;
+    div.textContent = content;
+
+    messageBox.appendChild(div);
+    messageBox.scrollTop = messageBox.scrollHeight;
+
+    return div;
+}
+
+function ask(text) {
+    if (sendButton.disabled) return;
+
+    input.value = text;
+    sendMessage();
+}
+
+async function sendMessage() {
+    const question = input.value.trim();
+
+    if (!question || sendButton.disabled) return;
+
+    input.value = "";
+
+    addMessage(question, "user");
+
+    messages.push({
+        role: "user",
+        content: question
+    });
+
+    sendButton.disabled = true;
+
+    const loading = addMessage(
+        "LENNY AI is thinking...",
+        "typing"
+    );
+
+    try {
+        const response = await fetch(
+            "/v1/chat/completions",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    messages: messages.slice(-20)
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "LENNY AI could not answer."
+            );
+        }
+
+        const answer = data.choices?.[0]?.message?.content;
+
+        if (typeof answer !== "string") {
+            throw new Error("Invalid response from LENNY AI.");
+        }
+
+        loading.remove();
+
+        addMessage(answer, "assistant");
+
+        messages.push({
+            role: "assistant",
+            content: answer
+        });
+
+    } catch (error) {
+        console.error("LENNY AI error:", error);
+
+        loading.remove();
+
+        // Remove the unanswered user message
+        messages.pop();
+
+        addMessage(
+            error.message || "Sorry! Something went wrong. Please try again.",
+            "assistant"
+        );
+
+    } finally {
+        sendButton.disabled = false;
+        input.focus();
+    }
+}
+
+input.addEventListener("keydown", function(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+});
+</script>
+
+</body>
+</html>
+"""
+
+# ==========================================
+# WEBSITE ROUTE
+# ==========================================
+
+@app.get("/", response_class=HTMLResponse)
+async def homepage():
+    return HTML
+
+
+# ==========================================
+# REQUEST VALIDATION
+# ==========================================
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(
+        min_length=1,
+        max_length=20
+    )
+
+
+# ==========================================
+# HEALTH CHECK
+# ==========================================
+
+@app.get("/health")
+async def health():
+    return {
+        "name": APP_NAME,
+        "status": "online",
+        "ai_configured": client is not None
+    }
+
+
+# ==========================================
+# MODEL INFORMATION
+# ==========================================
+
+@app.get("/v1/models")
+async def models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "lenny-smart",
+                "object": "model",
+                "owned_by": "lenny"
+            }
+        ]
+    }
+
+
+# ==========================================
+# LENNY AI CHAT API
+# ==========================================
+
+@app.post("/v1/chat/completions")
+async def chat(request: ChatRequest):
+
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="LENNY AI API key is not configured."
+        )
+
+    clean_messages = []
+
+    for message in request.messages:
+
+        content = message.content.strip()
+
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail="Message cannot be empty."
+            )
+
+        clean_messages.append({
+            "role": message.role,
+            "content": content
+        })
+
+    try:
+
+        response = client.responses.create(
+            model=MODEL,
+
+            instructions="""
+You are LENNY AI, an intelligent, helpful,
+friendly and professional AI assistant.
+
+Your identity is LENNY AI.
+
+Always introduce yourself as LENNY AI when
+asked about your identity.
+
+Answer questions accurately.
+Explain complicated topics clearly.
+Help with writing, learning, mathematics and coding.
+Maintain conversation context.
+Be honest about uncertainty.
+Never invent facts.
+""",
+
+            input=clean_messages
+        )
+
+        answer = response.output_text
+
+        if not answer:
+            raise ValueError("The AI returned an empty response.")
+
+        return {
+            "id": "lenny-" + str(uuid.uuid4()),
+            "object": "chat.completion",
+            "model": "lenny-smart",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": answer
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        logger.exception("LENNY AI API request failed")
+
+        raise HTTPException(
+            status_code=502,
+            detail="LENNY AI encountered an engine error. Check server logs."
+        )
+
+
+# ==========================================
+# FAVICON
+# ==========================================
+
+@app.get("/favicon.ico")
+async def favicon():
+    return {"message": "LENNY AI"}
